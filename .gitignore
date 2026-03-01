@@ -1,0 +1,15 @@
+# Local secrets
+config/wa_config.local.php
+config/database.local.php
+
+# Local data / backup
+backups/
+*.sql.zip
+*.bak
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.tmp
+*.log
+.vscode/
