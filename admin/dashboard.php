@@ -1,9 +1,34 @@
 <?php
 include '../config/session_admin.php';
 include '../config/database.php';
+include '../config/peminjaman_schema.php';
+include '../config/permintaan_schema.php';
 include_once '../partials/dashboard_ui.php';
 
 $activeMenu = 'dashboard';
+ensure_peminjaman_schema($conn);
+ensure_permintaan_schema($conn);
+
+$ringkasan = [
+    'dipinjam' => 0,
+    'terlambat' => 0,
+    'minta_hari_ini' => 0,
+];
+$qDipinjam = mysqli_query($conn, "SELECT COUNT(*) AS total FROM peminjaman WHERE status = 'D'");
+if ($qDipinjam) {
+    $row = mysqli_fetch_assoc($qDipinjam);
+    $ringkasan['dipinjam'] = (int)($row['total'] ?? 0);
+}
+$qTerlambat = mysqli_query($conn, "SELECT COUNT(*) AS total FROM peminjaman WHERE status = 'D' AND due_at IS NOT NULL AND due_at < NOW()");
+if ($qTerlambat) {
+    $row = mysqli_fetch_assoc($qTerlambat);
+    $ringkasan['terlambat'] = (int)($row['total'] ?? 0);
+}
+$qMinta = mysqli_query($conn, "SELECT COUNT(*) AS total FROM permintaan_barang WHERE DATE(tanggal_input) = CURDATE()");
+if ($qMinta) {
+    $row = mysqli_fetch_assoc($qMinta);
+    $ringkasan['minta_hari_ini'] = (int)($row['total'] ?? 0);
+}
 
 $top_barang = mysqli_query($conn, "
     SELECT b.nama_barang, SUM(p.jumlah_pinjam) AS total_pinjam
@@ -48,6 +73,11 @@ $laporan_terbaru = mysqli_query($conn, "
                     <div class="card">
                         <h2>Selamat datang, <?php echo htmlspecialchars($_SESSION['nama']); ?></h2>
                         <p class="muted">Gunakan menu di sebelah kiri untuk mengelola data.</p>
+                        <div class="controls">
+                            <span class="badge badge-success">Sedang Dipinjam: <?php echo $ringkasan['dipinjam']; ?></span>
+                            <span class="badge badge-danger">Terlambat: <?php echo $ringkasan['terlambat']; ?></span>
+                            <span class="badge badge-info">Minta Barang Hari Ini: <?php echo $ringkasan['minta_hari_ini']; ?></span>
+                        </div>
                     </div>
 
                     <div class="card">
