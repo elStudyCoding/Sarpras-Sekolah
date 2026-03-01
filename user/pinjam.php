@@ -131,12 +131,6 @@ if (isset($_POST['pinjam'])) {
                 <?php render_dashboard_sidebar(get_user_menu_items(), $activeMenu); ?>
 
                 <section class="main-panel">
-                    <?php if (!$isRequestHours): ?>
-                    <div class="card alert-warning">
-                        Sarpras hanya menerima permintaan dan peminjaman di jam sekolah saja (<?php echo htmlspecialchars(school_request_hours_label()); ?>).
-                    </div>
-                    <?php endif; ?>
-
                     <?php if (mysqli_num_rows($barang_tidak_tersedia) > 0): ?>
                     <div class="card alert-warning">
                         <h3>Perhatian: Barang Sedang Digunakan</h3>
@@ -162,7 +156,8 @@ if (isset($_POST['pinjam'])) {
 
                     <div class="card">
                         <h2>Pinjam Barang</h2>
-                        <form method="post">
+                        <div id="requestHoursNotice" class="card alert-warning" style="display:none;"></div>
+                        <form method="post" id="pinjamForm">
                             <?php echo csrf_input(); ?>
                             <div class="form-grid">
                                 <div>
@@ -194,7 +189,7 @@ if (isset($_POST['pinjam'])) {
                             </div>
 
                             <div class="controls form-mobile-actions">
-                                <button name="pinjam" class="btn btn-primary" <?php echo !$isRequestHours ? 'disabled' : ''; ?>>Pinjam Barang</button>
+                                <button name="pinjam" class="btn btn-primary">Pinjam Barang</button>
                                 <a href="dashboard.php" class="btn btn-secondary">Batal</a>
                             </div>
                         </form>
@@ -206,10 +201,28 @@ if (isset($_POST['pinjam'])) {
     <div id="userToast" class="user-toast" aria-live="polite"></div>
     <script>
         (function () {
+            var isRequestHours = <?php echo $isRequestHours ? 'true' : 'false'; ?>;
+            var requestLabel = <?php echo json_encode(school_request_hours_label()); ?>;
+            var requestMessage = 'Sarpras hanya menerima permintaan dan peminjaman di jam sekolah saja (' + requestLabel + ').';
+            var form = document.getElementById('pinjamForm');
+            var notice = document.getElementById('requestHoursNotice');
+
+            if (form) {
+                form.addEventListener('submit', function (event) {
+                    if (isRequestHours) return;
+                    event.preventDefault();
+                    if (notice) {
+                        notice.textContent = requestMessage;
+                        notice.style.display = 'block';
+                        notice.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                });
+            }
+
             if (window.innerWidth > 640) return;
             var toast = document.getElementById('userToast');
             if (!toast) return;
-            var source = document.querySelector('.alert-danger, .alert-success');
+            var source = document.querySelector('.alert-danger, .alert-success, .alert-warning');
             if (!source) return;
             toast.textContent = source.textContent.trim();
             toast.classList.add(source.classList.contains('alert-danger') ? 'error' : 'success');
