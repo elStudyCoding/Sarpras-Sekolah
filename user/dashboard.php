@@ -9,7 +9,6 @@ include_once '../partials/dashboard_ui.php';
 $activeMenu = 'dashboard';
 ensure_peminjaman_schema($conn);
 ensure_permintaan_schema($conn);
-apply_overdue_penalties($conn);
 
 mysqli_query($conn, "
     CREATE TABLE IF NOT EXISTS laporan (

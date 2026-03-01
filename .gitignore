@@ -6,6 +6,8 @@ config/database.local.php
 backups/
 *.sql.zip
 *.bak
+deploy_ready/
+deploy_ready.zip
 
 # OS / editor noise
 .DS_Store

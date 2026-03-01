@@ -9,13 +9,13 @@ include_once '../partials/dashboard_ui.php';
 
 $activeMenu = 'minta';
 ensure_permintaan_schema($conn);
-$isSchoolHours = school_hours_is_open_now();
+$isRequestHours = school_request_is_open_now();
 
 if (isset($_POST['kirim'])) {
     if (!csrf_is_valid_request()) {
         $error = "Permintaan tidak valid. Silakan refresh halaman lalu coba lagi.";
-    } elseif (!school_hours_is_open_now()) {
-        $error = "sarpras hanya menerima permintaan dan laporan di jam sekolah saja";
+    } elseif (!school_request_is_open_now()) {
+        $error = "Sarpras hanya menerima permintaan dan peminjaman di jam sekolah saja.";
     }
 
     $user_id = get_public_actor_id($conn);
@@ -79,9 +79,9 @@ if (isset($_POST['kirim'])) {
                         <strong>Error!</strong> <?php echo htmlspecialchars($error); ?>
                     </div>
                     <?php endif; ?>
-                    <?php if (!$isSchoolHours): ?>
+                    <?php if (!$isRequestHours): ?>
                     <div class="card alert-warning">
-                        Sarpras hanya melayani input pada jam sekolah (<?php echo htmlspecialchars(school_hours_label()); ?>).
+                        Sarpras hanya menerima permintaan dan peminjaman di jam sekolah saja (<?php echo htmlspecialchars(school_request_hours_label()); ?>).
                     </div>
                     <?php endif; ?>
 
@@ -118,7 +118,7 @@ if (isset($_POST['kirim'])) {
                             </div>
 
                             <div class="controls form-mobile-actions">
-                                <button type="submit" name="kirim" class="btn btn-primary" <?php echo !$isSchoolHours ? 'disabled' : ''; ?>>Simpan Minta Barang</button>
+                                <button type="submit" name="kirim" class="btn btn-primary" <?php echo !$isRequestHours ? 'disabled' : ''; ?>>Simpan Minta Barang</button>
                                 <a href="dashboard.php" class="btn btn-secondary">Kembali</a>
                             </div>
                         </form>

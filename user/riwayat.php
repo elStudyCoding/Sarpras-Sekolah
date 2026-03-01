@@ -9,7 +9,6 @@ include_once '../partials/dashboard_ui.php';
 $activeMenu = 'riwayat';
 ensure_peminjaman_schema($conn);
 ensure_permintaan_schema($conn);
-apply_overdue_penalties($conn);
 
 $q = mysqli_query($conn, "
     SELECT p.*, b.nama_barang

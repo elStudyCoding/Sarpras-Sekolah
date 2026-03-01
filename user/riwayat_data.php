@@ -5,7 +5,6 @@ include '../config/peminjaman_schema.php';
 include '../config/peminjaman_policy.php';
 
 ensure_peminjaman_schema($conn);
-apply_overdue_penalties($conn);
 
 $q = mysqli_query($conn, "
     SELECT p.*, b.nama_barang

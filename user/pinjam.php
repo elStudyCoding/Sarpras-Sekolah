@@ -5,11 +5,12 @@ include '../config/csrf.php';
 include '../config/public_actor.php';
 include '../config/peminjaman_schema.php';
 include '../config/peminjaman_policy.php';
+include '../config/school_hours.php';
 include_once '../partials/dashboard_ui.php';
 
 $activeMenu = 'pinjam';
 ensure_peminjaman_schema($conn);
-apply_overdue_penalties($conn);
+$isRequestHours = school_request_is_open_now();
 
 $barang = mysqli_query($conn, "SELECT * FROM barang ORDER BY nama_barang");
 $barang_tidak_tersedia = mysqli_query($conn, "SELECT * FROM barang WHERE jumlah <= 0 ORDER BY nama_barang");
@@ -24,6 +25,8 @@ while($row = mysqli_fetch_assoc($barang_query)) {
 if (isset($_POST['pinjam'])) {
     if (!csrf_is_valid_request()) {
         $error = "Permintaan tidak valid. Silakan refresh halaman lalu coba lagi.";
+    } elseif (!school_request_is_open_now()) {
+        $error = "Sarpras hanya menerima permintaan dan peminjaman di jam sekolah saja.";
     }
 
     $user_id = get_public_actor_id($conn);
@@ -128,6 +131,12 @@ if (isset($_POST['pinjam'])) {
                 <?php render_dashboard_sidebar(get_user_menu_items(), $activeMenu); ?>
 
                 <section class="main-panel">
+                    <?php if (!$isRequestHours): ?>
+                    <div class="card alert-warning">
+                        Sarpras hanya menerima permintaan dan peminjaman di jam sekolah saja (<?php echo htmlspecialchars(school_request_hours_label()); ?>).
+                    </div>
+                    <?php endif; ?>
+
                     <?php if (mysqli_num_rows($barang_tidak_tersedia) > 0): ?>
                     <div class="card alert-warning">
                         <h3>Perhatian: Barang Sedang Digunakan</h3>
@@ -185,7 +194,7 @@ if (isset($_POST['pinjam'])) {
                             </div>
 
                             <div class="controls form-mobile-actions">
-                                <button name="pinjam" class="btn btn-primary">Pinjam Barang</button>
+                                <button name="pinjam" class="btn btn-primary" <?php echo !$isRequestHours ? 'disabled' : ''; ?>>Pinjam Barang</button>
                                 <a href="dashboard.php" class="btn btn-secondary">Batal</a>
                             </div>
                         </form>
