@@ -26,7 +26,7 @@ if ($id <= 0 || !in_array($status, $allowed, true)) {
 
 $laporan = db_fetch_one(
     $conn,
-    "SELECT kelas, kategori, lokasi, no_telp FROM laporan WHERE id = ? LIMIT 1",
+    "SELECT status, kelas, kategori, lokasi, no_telp FROM laporan WHERE id = ? LIMIT 1",
     "i",
     [$id]
 );
@@ -42,12 +42,21 @@ if ($update !== false && ($update['affected_rows'] ?? 0) > 0) {
     $waResult = 'not_sent';
     $waError = '';
     if ($laporan && in_array($status, ['Ditangani', 'Selesai'], true)) {
+        $oldStatus = trim((string)($laporan['status'] ?? ''));
         $kelas = trim((string)($laporan['kelas'] ?? '-'));
         $kategori = trim((string)($laporan['kategori'] ?? '-'));
         $lokasi = trim((string)($laporan['lokasi'] ?? '-'));
         $now = date('d/m/Y H:i');
 
-        if ($status === 'Ditangani') {
+        if ($status === 'Ditangani' && $oldStatus === 'Selesai') {
+            $message = "[E-Sarpras Sekolah]\n"
+                . "Status Laporan: DIKEMBALIKAN KE DITANGANI\n"
+                . "Kelas: {$kelas}\n"
+                . "Kategori: {$kategori}\n"
+                . "Lokasi: {$lokasi}\n"
+                . "Update: {$now}\n"
+                . "Laporan Anda perlu tindak lanjut tambahan dari tim sarpras.";
+        } elseif ($status === 'Ditangani') {
             $message = "[E-Sarpras Sekolah]\n"
                 . "Status Laporan: SEDANG DITANGANI\n"
                 . "Kelas: {$kelas}\n"
@@ -87,6 +96,7 @@ if ($update !== false && ($update['affected_rows'] ?? 0) > 0) {
         'entity' => 'laporan',
         'entity_id' => $id,
         'details' => [
+            'status_before' => $laporan['status'] ?? null,
             'status' => $status,
             'wa_result' => $waResult,
             'wa_error' => $waError,
