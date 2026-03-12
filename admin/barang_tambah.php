@@ -4,27 +4,30 @@ include '../config/database.php';
 include '../config/csrf.php';
 include '../config/db_helper.php';
 include '../config/audit_log.php';
+include '../config/barang_schema.php';
 include_once '../partials/dashboard_ui.php';
 
 $activeMenu = 'barang';
 $error = '';
+ensure_barang_schema($conn);
 
 if (isset($_POST['simpan'])) {
     if (!csrf_is_valid_request()) {
         $error = 'Permintaan tidak valid. Silakan coba lagi.';
     } else {
         $nama = trim($_POST['nama_barang'] ?? '');
+        $kategori = trim($_POST['kategori'] ?? '');
         $jumlah = (int)($_POST['jumlah'] ?? 0);
         $kondisi = trim($_POST['kondisi'] ?? '');
 
-        if ($nama === '' || $jumlah < 1) {
-            $error = 'Nama barang dan jumlah wajib diisi dengan benar.';
+        if ($nama === '' || $kategori === '' || $jumlah < 1) {
+            $error = 'Nama barang, kategori, dan jumlah wajib diisi dengan benar.';
         } else {
             $insert = db_exec(
                 $conn,
-                "INSERT INTO barang (nama_barang, jumlah, kondisi) VALUES (?, ?, ?)",
-                "sis",
-                [$nama, $jumlah, $kondisi]
+                "INSERT INTO barang (nama_barang, kategori, jumlah, kondisi) VALUES (?, ?, ?, ?)",
+                "ssis",
+                [$nama, $kategori, $jumlah, $kondisi]
             );
 
             if ($insert === false) {
@@ -37,12 +40,13 @@ if (isset($_POST['simpan'])) {
                     'action' => 'create',
                     'entity' => 'barang',
                     'entity_id' => $insert['insert_id'] ?? 0,
-                    'details' => [
-                        'nama_barang' => $nama,
-                        'jumlah' => $jumlah,
-                        'kondisi' => $kondisi,
-                    ],
-                ]);
+                        'details' => [
+                            'nama_barang' => $nama,
+                            'kategori' => $kategori,
+                            'jumlah' => $jumlah,
+                            'kondisi' => $kondisi,
+                        ],
+                    ]);
 
                 header("Location: barang.php");
                 exit;
@@ -86,6 +90,15 @@ if (isset($_POST['simpan'])) {
                                 <div>
                                     <label>Nama Barang</label>
                                     <input type="text" name="nama_barang" required>
+                                </div>
+                                <div>
+                                    <label>Kategori</label>
+                                    <select name="kategori" required>
+                                        <option value="">Pilih Kategori</option>
+                                        <option value="Elektronik">Elektronik</option>
+                                        <option value="Alat Tulis">Alat Tulis</option>
+                                        <option value="Alat Kebersihan">Alat Kebersihan</option>
+                                    </select>
                                 </div>
 
                                 <div>

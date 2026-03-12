@@ -4,11 +4,13 @@ include '../config/database.php';
 include '../config/csrf.php';
 include '../config/db_helper.php';
 include '../config/audit_log.php';
+include '../config/barang_schema.php';
 include_once '../partials/dashboard_ui.php';
 
 $activeMenu = 'barang';
 $id = (int)($_GET['id'] ?? 0);
 $error = '';
+ensure_barang_schema($conn);
 
 $b = db_fetch_one($conn, "SELECT * FROM barang WHERE id = ? LIMIT 1", "i", [$id]);
 
@@ -23,16 +25,17 @@ if (isset($_POST['update'])) {
     } else {
         $tambah = (int)($_POST['jumlah'] ?? 0);
         $nama = trim($_POST['nama_barang'] ?? '');
+        $kategori = trim($_POST['kategori'] ?? '');
         $kondisi = trim($_POST['kondisi'] ?? '');
 
-        if ($nama === '' || $tambah < 0) {
-            $error = 'Nama barang wajib diisi dan tambah jumlah tidak boleh negatif.';
+        if ($nama === '' || $kategori === '' || $tambah < 0) {
+            $error = 'Nama barang, kategori wajib diisi dan tambah jumlah tidak boleh negatif.';
         } else {
             $update = db_exec(
                 $conn,
-                "UPDATE barang SET nama_barang = ?, jumlah = jumlah + ?, kondisi = ? WHERE id = ?",
-                "sisi",
-                [$nama, $tambah, $kondisi, $id]
+                "UPDATE barang SET nama_barang = ?, kategori = ?, jumlah = jumlah + ?, kondisi = ? WHERE id = ?",
+                "ssisi",
+                [$nama, $kategori, $tambah, $kondisi, $id]
             );
             if ($update === false) {
                 $error = 'Gagal memperbarui data barang.';
@@ -46,6 +49,7 @@ if (isset($_POST['update'])) {
                     'entity_id' => $id,
                     'details' => [
                         'nama_barang' => $nama,
+                        'kategori' => $kategori,
                         'tambah_jumlah' => $tambah,
                         'kondisi' => $kondisi,
                     ],
@@ -92,6 +96,16 @@ if (isset($_POST['update'])) {
                                 <div>
                                     <label>Nama Barang</label>
                                     <input type="text" name="nama_barang" value="<?= htmlspecialchars($b['nama_barang']); ?>" required>
+                                </div>
+                                <div>
+                                    <label>Kategori</label>
+                                    <select name="kategori" required>
+                                        <?php $currentKategori = (string)($b['kategori'] ?? ''); ?>
+                                        <option value="">Pilih Kategori</option>
+                                        <option value="Elektronik" <?= $currentKategori === 'Elektronik' ? 'selected' : ''; ?>>Elektronik</option>
+                                        <option value="Alat Tulis" <?= $currentKategori === 'Alat Tulis' ? 'selected' : ''; ?>>Alat Tulis</option>
+                                        <option value="Alat Kebersihan" <?= $currentKategori === 'Alat Kebersihan' ? 'selected' : ''; ?>>Alat Kebersihan</option>
+                                    </select>
                                 </div>
 
                                 <div>

@@ -2,19 +2,48 @@
 include '../config/session_admin.php';
 include '../config/database.php';
 include '../config/csrf.php';
+include '../config/barang_schema.php';
 include '../config/peminjaman_schema.php';
 include '../config/peminjaman_policy.php';
 
 ensure_peminjaman_schema($conn);
+ensure_barang_schema($conn);
 apply_overdue_penalties($conn);
 
-$q = mysqli_query($conn, "
-    SELECT p.*, u.nama AS nama_akun, b.nama_barang
+$filterNama = trim((string)($_GET['nama'] ?? ''));
+$filterKelas = trim((string)($_GET['kelas'] ?? ''));
+$filterKategori = trim((string)($_GET['kategori'] ?? ''));
+
+$sql = "
+    SELECT p.*, u.nama AS nama_akun, b.nama_barang, b.kategori
     FROM peminjaman p
     JOIN users u ON p.user_id=u.id
     JOIN barang b ON p.barang_id=b.id
-    ORDER BY p.id DESC
-");
+";
+
+$where = ["b.kategori <> 'Alat Tulis'"];
+if ($filterNama !== '') {
+    $safe = mysqli_real_escape_string($conn, $filterNama);
+    $like = '%' . $safe . '%';
+    $where[] = "(p.nama_siswa LIKE '{$like}' OR u.nama LIKE '{$like}')";
+}
+
+if ($filterKelas !== '') {
+    $safe = mysqli_real_escape_string($conn, $filterKelas);
+    $like = '%' . $safe . '%';
+    $where[] = "p.kelas LIKE '{$like}'";
+}
+
+if ($filterKategori !== '') {
+    $safe = mysqli_real_escape_string($conn, $filterKategori);
+    $where[] = "b.kategori = '{$safe}'";
+}
+
+$sql .= " WHERE " . implode(" AND ", $where);
+
+$sql .= " ORDER BY p.id DESC";
+
+$q = mysqli_query($conn, $sql);
 
 $rows = '';
 while ($p = mysqli_fetch_assoc($q)) {
@@ -46,6 +75,7 @@ while ($p = mysqli_fetch_assoc($q)) {
         . '<td>' . htmlspecialchars($p['nama_siswa'] ?: $p['nama_akun']) . '</td>'
         . '<td>' . htmlspecialchars($p['kelas'] ?: '-') . '</td>'
         . '<td>' . htmlspecialchars($p['nama_barang']) . '</td>'
+        . '<td>' . htmlspecialchars($p['kategori'] ?? '-') . '</td>'
         . '<td>' . (int)$p['jumlah_pinjam'] . '</td>'
         . '<td>' . (!empty($p['due_at']) ? date('d/m/Y H:i', strtotime((string)$p['due_at'])) : '-') . '</td>'
         . '<td>' . $status . '</td>'
@@ -54,7 +84,7 @@ while ($p = mysqli_fetch_assoc($q)) {
 }
 
 if ($rows === '') {
-    $rows = '<tr><td colspan="7" class="empty-state">Belum ada data peminjaman.</td></tr>';
+    $rows = '<tr><td colspan="8" class="empty-state">Belum ada data peminjaman.</td></tr>';
 }
 
 header('Content-Type: application/json');

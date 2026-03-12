@@ -20,6 +20,7 @@ if (isset($_POST['kirim'])) {
 
     $user_id = get_public_actor_id($conn);
     $kelas = trim($_POST['kelas'] ?? '');
+    $kategori = trim($_POST['kategori'] ?? '');
     $barang = trim($_POST['barang'] ?? '');
     $jumlah = (int)($_POST['jumlah'] ?? 0);
     $jam_mapel = trim($_POST['jam_mapel'] ?? '');
@@ -28,6 +29,8 @@ if (isset($_POST['kirim'])) {
         $error = "Akun sistem publik tidak tersedia. Hubungi admin.";
     } elseif (empty($error) && $kelas === '') {
         $error = "Kelas wajib diisi.";
+    } elseif (empty($error) && $kategori === '') {
+        $error = "Kategori wajib diisi.";
     } elseif (empty($error) && $barang === '') {
         $error = "Nama barang wajib diisi.";
     } elseif (empty($error) && $jumlah <= 0) {
@@ -36,10 +39,10 @@ if (isset($_POST['kirim'])) {
         $error = "Jam mapel wajib diisi.";
     } elseif (empty($error)) {
         $stmt = mysqli_prepare($conn, "
-            INSERT INTO permintaan_barang (user_id, kelas, barang, jumlah, jam_mapel)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO permintaan_barang (user_id, kelas, kategori, barang, jumlah, jam_mapel, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'Pending')
         ");
-        mysqli_stmt_bind_param($stmt, "issis", $user_id, $kelas, $barang, $jumlah, $jam_mapel);
+        mysqli_stmt_bind_param($stmt, "isssis", $user_id, $kelas, $kategori, $barang, $jumlah, $jam_mapel);
         $ok = mysqli_stmt_execute($stmt);
         mysqli_stmt_close($stmt);
 
@@ -82,7 +85,7 @@ if (isset($_POST['kirim'])) {
 
                     <?php if (isset($_GET['status']) && $_GET['status'] === 'ok'): ?>
                     <div class="card alert-success">
-                        Minta barang berhasil disimpan.
+                        Minta barang berhasil disimpan dan menunggu persetujuan admin.
                     </div>
                     <?php endif; ?>
 
@@ -95,6 +98,14 @@ if (isset($_POST['kirim'])) {
                                 <div>
                                     <label for="kelas">Kelas</label>
                                     <input type="text" id="kelas" name="kelas" placeholder="Contoh: XI RPL 1" required>
+                                </div>
+                                <div>
+                                    <label for="kategori">Kategori</label>
+                                    <select id="kategori" name="kategori" required>
+                                        <option value="">Pilih Kategori</option>
+                                        <option value="Alat Tulis">Alat Tulis</option>
+                                        <option value="Alat Kebersihan">Alat Kebersihan</option>
+                                    </select>
                                 </div>
                                 <div>
                                     <label for="barang">Barang</label>

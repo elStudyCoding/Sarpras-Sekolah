@@ -1,17 +1,35 @@
 <?php
 include '../config/session_public.php';
 include '../config/database.php';
+include '../config/barang_schema.php';
 include '../config/peminjaman_schema.php';
 include '../config/peminjaman_policy.php';
 
 ensure_peminjaman_schema($conn);
+ensure_barang_schema($conn);
 
-$q = mysqli_query($conn, "
-    SELECT p.*, b.nama_barang
+$filterKategori = trim((string)($_GET['kategori'] ?? ''));
+
+$sql = "
+    SELECT p.*, b.nama_barang, b.kategori
     FROM peminjaman p
     JOIN barang b ON p.barang_id=b.id
-    ORDER BY p.tanggal_pinjam DESC
-");
+";
+if ($filterKategori !== '') {
+    $sql .= " WHERE b.kategori = ?";
+}
+$sql .= " ORDER BY p.tanggal_pinjam DESC";
+
+$q = null;
+if ($filterKategori !== '') {
+    $stmt = mysqli_prepare($conn, $sql);
+    mysqli_stmt_bind_param($stmt, "s", $filterKategori);
+    mysqli_stmt_execute($stmt);
+    $q = mysqli_stmt_get_result($stmt);
+    mysqli_stmt_close($stmt);
+} else {
+    $q = mysqli_query($conn, $sql);
+}
 
 $rows = '';
 while ($r = mysqli_fetch_assoc($q)) {
@@ -31,6 +49,7 @@ $rows .= '<tr>'
         . '<td data-label="Nama Siswa">' . htmlspecialchars($r['nama_siswa'] ?: '-') . '</td>'
         . '<td data-label="Kelas">' . htmlspecialchars($r['kelas'] ?: '-') . '</td>'
         . '<td data-label="Barang">' . htmlspecialchars($r['nama_barang']) . '</td>'
+        . '<td data-label="Kategori">' . htmlspecialchars($r['kategori'] ?? '-') . '</td>'
         . '<td data-label="Jumlah">' . (int)$r['jumlah_pinjam'] . '</td>'
         . '<td data-label="Tanggal Pinjam">' . date('d/m/Y', strtotime($r['tanggal_pinjam'])) . '</td>'
         . '<td data-label="Batas Kembali">' . (!empty($r['due_at']) ? date('d/m/Y H:i', strtotime((string)$r['due_at'])) : '-') . '</td>'
@@ -39,7 +58,7 @@ $rows .= '<tr>'
 }
 
 if ($rows === '') {
-    $rows = '<tr><td colspan="7" class="empty-state">Belum ada peminjaman.</td></tr>';
+    $rows = '<tr><td colspan="8" class="empty-state">Belum ada peminjaman.</td></tr>';
 }
 
 header('Content-Type: application/json');

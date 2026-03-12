@@ -8,6 +8,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/barang_schema.php';
 require_once __DIR__ . '/../config/peminjaman_schema.php';
 require_once __DIR__ . '/../config/permintaan_schema.php';
 require_once __DIR__ . '/../config/laporan_schema.php';
@@ -33,6 +34,7 @@ if (strlen($adminPassword) < 12) {
 ensure_peminjaman_schema($conn);
 ensure_permintaan_schema($conn);
 ensure_laporan_schema($conn);
+ensure_barang_schema($conn);
 
 function table_exists(mysqli $conn, string $tableName): bool
 {
@@ -90,18 +92,23 @@ try {
 
     $stmtBarang = mysqli_prepare(
         $conn,
-        'INSERT INTO barang (id, nama_barang, jumlah, kondisi) VALUES (?, ?, ?, ?)'
+        'INSERT INTO barang (id, nama_barang, kategori, jumlah, kondisi) VALUES (?, ?, ?, ?, ?)'
     );
 
     $seedBarang = [
-        [1, 'LCD', 8, 'Baik'],
-        [2, 'Kabel HDMI', 15, 'Baik'],
-        [3, 'Speaker', 6, 'Baik'],
+        [1, 'LCD', 'Elektronik', 8, 'Baik'],
+        [2, 'Kabel HDMI', 'Elektronik', 15, 'Baik'],
+        [3, 'Speaker', 'Elektronik', 6, 'Baik'],
+        [4, 'Kertas A4', 'Alat Tulis', 50, 'Baik'],
+        [5, 'Folio Bergaris', 'Alat Tulis', 40, 'Baik'],
+        [6, 'Spidol', 'Alat Tulis', 20, 'Baik'],
+        [7, 'Penghapus Papan', 'Alat Kebersihan', 15, 'Baik'],
+        [8, 'Sapu', 'Alat Kebersihan', 10, 'Baik'],
     ];
 
     foreach ($seedBarang as $row) {
-        [$barangId, $namaBarang, $jumlah, $kondisi] = $row;
-        mysqli_stmt_bind_param($stmtBarang, 'isis', $barangId, $namaBarang, $jumlah, $kondisi);
+        [$barangId, $namaBarang, $kategori, $jumlah, $kondisi] = $row;
+        mysqli_stmt_bind_param($stmtBarang, 'issis', $barangId, $namaBarang, $kategori, $jumlah, $kondisi);
         mysqli_stmt_execute($stmtBarang);
     }
     mysqli_stmt_close($stmtBarang);

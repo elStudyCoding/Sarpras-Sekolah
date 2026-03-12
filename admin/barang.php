@@ -2,10 +2,35 @@
 include '../config/session_admin.php';
 include '../config/database.php';
 include '../config/csrf.php';
+include '../config/barang_schema.php';
 include_once '../partials/dashboard_ui.php';
 
 $activeMenu = 'barang';
-$data = mysqli_query($conn, "SELECT * FROM barang");
+ensure_barang_schema($conn);
+$filterKategori = trim((string)($_GET['kategori'] ?? ''));
+$kategoriList = mysqli_query($conn, "
+    SELECT DISTINCT kategori
+    FROM barang
+    WHERE kategori IS NOT NULL AND kategori <> ''
+    ORDER BY kategori ASC
+");
+
+$sql = "SELECT * FROM barang";
+if ($filterKategori !== '') {
+    $sql .= " WHERE kategori = ?";
+}
+$sql .= " ORDER BY nama_barang ASC";
+
+$data = null;
+if ($filterKategori !== '') {
+    $stmt = mysqli_prepare($conn, $sql);
+    mysqli_stmt_bind_param($stmt, "s", $filterKategori);
+    mysqli_stmt_execute($stmt);
+    $data = mysqli_stmt_get_result($stmt);
+    mysqli_stmt_close($stmt);
+} else {
+    $data = mysqli_query($conn, $sql);
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -36,6 +61,26 @@ $data = mysqli_query($conn, "SELECT * FROM barang");
                                 <a href="barang_tambah.php" class="btn btn-success">Tambah Barang</a>
                             </div>
                         </div>
+                        <form method="get" class="form-grid filter-bar">
+                            <div>
+                                <label>Kategori</label>
+                                <select name="kategori">
+                                    <option value="">Semua Kategori</option>
+                                    <?php if ($kategoriList && mysqli_num_rows($kategoriList) > 0): ?>
+                                        <?php while ($cat = mysqli_fetch_assoc($kategoriList)): ?>
+                                            <?php $val = (string)($cat['kategori'] ?? ''); ?>
+                                            <?php if ($val !== ''): ?>
+                                                <option value="<?= htmlspecialchars($val); ?>" <?= $filterKategori === $val ? 'selected' : ''; ?>><?= htmlspecialchars($val); ?></option>
+                                            <?php endif; ?>
+                                        <?php endwhile; ?>
+                                    <?php endif; ?>
+                                </select>
+                            </div>
+                            <div class="controls">
+                                <button type="submit" class="btn btn-primary">Terapkan</button>
+                                <a href="barang.php" class="btn btn-outline">Reset</a>
+                            </div>
+                        </form>
 
                         <div class="table-wrap">
                             <table>
@@ -43,6 +88,7 @@ $data = mysqli_query($conn, "SELECT * FROM barang");
                                     <tr>
                                         <th class="row-no">No</th>
                                         <th>Nama</th>
+                                        <th>Kategori</th>
                                         <th>Jumlah</th>
                                         <th>Kondisi</th>
                                         <th>Aksi</th>
@@ -53,6 +99,7 @@ $data = mysqli_query($conn, "SELECT * FROM barang");
                                         <tr>
                                             <td class="row-no"><?= $no++; ?></td>
                                             <td><?= htmlspecialchars($b['nama_barang']); ?></td>
+                                            <td><?= htmlspecialchars($b['kategori'] ?? '-'); ?></td>
                                             <td><?= htmlspecialchars($b['jumlah']); ?></td>
                                             <td><?= htmlspecialchars($b['kondisi']); ?></td>
                                             <td>

@@ -3,6 +3,7 @@ include '../config/session_public.php';
 include '../config/database.php';
 include '../config/csrf.php';
 include '../config/public_actor.php';
+include '../config/barang_schema.php';
 include '../config/peminjaman_schema.php';
 include '../config/peminjaman_policy.php';
 include '../config/school_hours.php';
@@ -10,14 +11,22 @@ include_once '../partials/dashboard_ui.php';
 
 $activeMenu = 'pinjam';
 ensure_peminjaman_schema($conn);
+ensure_barang_schema($conn);
 $isRequestHours = school_request_is_open_now();
 
-$barang = mysqli_query($conn, "SELECT * FROM barang ORDER BY nama_barang");
-$barang_tidak_tersedia = mysqli_query($conn, "SELECT * FROM barang WHERE jumlah <= 0 ORDER BY nama_barang");
+$kategoriList = mysqli_query($conn, "
+    SELECT DISTINCT kategori
+    FROM barang
+    WHERE kategori IS NOT NULL AND kategori <> '' AND kategori <> 'Alat Tulis'
+    ORDER BY kategori ASC
+");
+
+$barang = mysqli_query($conn, "SELECT * FROM barang WHERE (kategori IS NULL OR kategori <> 'Alat Tulis') ORDER BY nama_barang");
+$barang_tidak_tersedia = mysqli_query($conn, "SELECT * FROM barang WHERE jumlah <= 0 AND (kategori IS NULL OR kategori <> 'Alat Tulis') ORDER BY nama_barang");
 
 // Simpan barang tersedia ke array untuk bisa diloop berkali-kali
 $barang_tersedia = [];
-$barang_query = mysqli_query($conn, "SELECT * FROM barang WHERE jumlah > 0 ORDER BY nama_barang");
+$barang_query = mysqli_query($conn, "SELECT * FROM barang WHERE jumlah > 0 AND (kategori IS NULL OR kategori <> 'Alat Tulis') ORDER BY nama_barang");
 while($row = mysqli_fetch_assoc($barang_query)) {
     $barang_tersedia[] = $row;
 }
@@ -75,7 +84,7 @@ if (isset($_POST['pinjam'])) {
 
     if (empty($error)) {
         // Cek stok tersedia
-        $cekStmt = mysqli_prepare($conn, "SELECT jumlah FROM barang WHERE id = ? LIMIT 1");
+        $cekStmt = mysqli_prepare($conn, "SELECT jumlah, kategori FROM barang WHERE id = ? LIMIT 1");
         mysqli_stmt_bind_param($cekStmt, "i", $barang_id);
         mysqli_stmt_execute($cekStmt);
         $cekResult = mysqli_stmt_get_result($cekStmt);
@@ -84,6 +93,8 @@ if (isset($_POST['pinjam'])) {
         
         if (!$row_stok) {
             $error = "Barang tidak ditemukan.";
+        } elseif (isset($row_stok['kategori']) && $row_stok['kategori'] === 'Alat Tulis') {
+            $error = "Alat tulis hanya bisa diajukan lewat menu Minta Barang.";
         } elseif ((int)$row_stok['jumlah'] < $jumlah_pinjam) {
             $error = "Stok tidak mencukupi! Tersedia: " . $row_stok['jumlah'];
         } else {
@@ -135,11 +146,11 @@ if (isset($_POST['pinjam'])) {
                     <div class="card alert-warning">
                         <h3>Perhatian: Barang Sedang Digunakan</h3>
                         <p>Maaf, barang-barang berikut sedang digunakan oleh kelas yang membutuhkan alat ini:</p>
-                        <ul>
-                            <?php while($b = mysqli_fetch_assoc($barang_tidak_tersedia)): ?>
-                            <li><strong><?= htmlspecialchars($b['nama_barang']); ?></strong></li>
-                            <?php endwhile; ?>
-                        </ul>
+        <ul>
+            <?php while($b = mysqli_fetch_assoc($barang_tidak_tersedia)): ?>
+            <li><strong><?= htmlspecialchars($b['nama_barang']); ?></strong> (<?= htmlspecialchars($b['kategori'] ?? ''); ?>)</li>
+            <?php endwhile; ?>
+        </ul>
                     </div>
                     <?php endif; ?>
 
@@ -174,11 +185,27 @@ if (isset($_POST['pinjam'])) {
                                 <input type="text" id="no_telp" name="no_telp" class="form-control" placeholder="Contoh: 081234567890" required>
                             </div>
                             <div class="form-group">
+                                <label for="kategori_id">Pilih Kategori:</label>
+                                <select id="kategori_id" name="kategori_id" class="form-control" required>
+                                    <option value="">Pilih Kategori</option>
+                                    <?php if ($kategoriList && mysqli_num_rows($kategoriList) > 0): ?>
+                                        <?php while ($cat = mysqli_fetch_assoc($kategoriList)): ?>
+                                            <?php $val = (string)($cat['kategori'] ?? ''); ?>
+                                            <?php if ($val !== ''): ?>
+                                                <option value="<?= htmlspecialchars($val); ?>"><?= htmlspecialchars($val); ?></option>
+                                            <?php endif; ?>
+                                        <?php endwhile; ?>
+                                    <?php endif; ?>
+                                </select>
+                            </div>
+                            <div class="form-group">
                                 <label for="barang_id">Pilih Barang:</label>
                                 <select id="barang_id" name="barang_id" class="form-control" required>
                                     <option value="">Pilih Barang</option>
                                     <?php foreach($barang_tersedia as $b): ?>
-                                    <option value="<?= (int)$b['id']; ?>"><?= htmlspecialchars($b['nama_barang']); ?> (Tersedia: <?= (int)$b['jumlah']; ?>)</option>
+                                    <option value="<?= (int)$b['id']; ?>" data-kategori="<?= htmlspecialchars($b['kategori'] ?? ''); ?>">
+                                        <?= htmlspecialchars($b['nama_barang']); ?> - <?= htmlspecialchars($b['kategori'] ?? ''); ?> (Tersedia: <?= (int)$b['jumlah']; ?>)
+                                    </option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
@@ -206,6 +233,8 @@ if (isset($_POST['pinjam'])) {
             var requestMessage = 'Sarpras hanya menerima permintaan dan peminjaman di jam sekolah saja (' + requestLabel + ').';
             var form = document.getElementById('pinjamForm');
             var notice = document.getElementById('requestHoursNotice');
+            var kategoriSelect = document.getElementById('kategori_id');
+            var barangSelect = document.getElementById('barang_id');
 
             if (form) {
                 form.addEventListener('submit', function (event) {
@@ -217,6 +246,29 @@ if (isset($_POST['pinjam'])) {
                         notice.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     }
                 });
+            }
+
+            function filterBarangByKategori() {
+                if (!kategoriSelect || !barangSelect) return;
+                var kategori = kategoriSelect.value;
+                var hasVisible = false;
+                Array.prototype.forEach.call(barangSelect.options, function (opt) {
+                    if (!opt.value) return;
+                    var itemKategori = opt.getAttribute('data-kategori') || '';
+                    var visible = !kategori || itemKategori === kategori;
+                    opt.hidden = !visible;
+                    if (visible) {
+                        hasVisible = true;
+                    }
+                });
+                if (!hasVisible) {
+                    barangSelect.value = '';
+                }
+            }
+
+            if (kategoriSelect) {
+                kategoriSelect.addEventListener('change', filterBarangByKategori);
+                filterBarangByKategori();
             }
 
             if (window.innerWidth > 640) return;

@@ -466,6 +466,29 @@ textarea,
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.user-ui select.form-control {
+    appearance: none;
+    background-color: #fff;
+    background-image:
+        linear-gradient(45deg, transparent 50%, #3b6a86 50%),
+        linear-gradient(135deg, #3b6a86 50%, transparent 50%),
+        linear-gradient(to right, #e6f2fb, #e6f2fb);
+    background-position:
+        calc(100% - 20px) calc(1em + 2px),
+        calc(100% - 15px) calc(1em + 2px),
+        calc(100% - 42px) 50%;
+    background-size: 5px 5px, 5px 5px, 1px 20px;
+    background-repeat: no-repeat;
+    padding-right: 44px;
+}
+
+.user-ui select.form-control:focus {
+    background-image:
+        linear-gradient(45deg, transparent 50%, #0f7c90 50%),
+        linear-gradient(135deg, #0f7c90 50%, transparent 50%),
+        linear-gradient(to right, #d7edf7, #d7edf7);
+}
+
 textarea {
     resize: vertical;
 }
@@ -488,6 +511,51 @@ form {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-2);
+}
+
+.filter-bar {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    align-items: end;
+    margin-bottom: var(--space-2);
+    padding: var(--space-2);
+    border: 1px dashed #c6dbee;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(234, 246, 255, 0.9) 100%);
+}
+
+.filter-bar .controls {
+    justify-content: flex-start;
+}
+
+.filter-bar .btn {
+    width: auto;
+}
+
+.filter-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-3);
+    margin-bottom: var(--space-2);
+}
+
+.filter-header .filter-bar {
+    flex: 1 1 520px;
+    margin-bottom: 0;
+}
+
+.filter-header .filter-actions {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+}
+
+.filter-header + .controls {
+    margin-top: var(--space-2);
+}
+
+.filter-header + .table-wrap {
+    margin-top: var(--space-2);
 }
 
 .form-group,

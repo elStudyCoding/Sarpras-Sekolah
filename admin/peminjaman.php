@@ -2,21 +2,57 @@
 include '../config/session_admin.php';
 include '../config/database.php';
 include '../config/csrf.php';
+include '../config/barang_schema.php';
 include '../config/peminjaman_schema.php';
 include '../config/peminjaman_policy.php';
 include_once '../partials/dashboard_ui.php';
 
 $activeMenu = 'peminjaman';
 ensure_peminjaman_schema($conn);
+ensure_barang_schema($conn);
 apply_overdue_penalties($conn);
 
-$q = mysqli_query($conn, "
-    SELECT p.*, u.nama AS nama_akun, b.nama_barang
+$filterNama = trim((string)($_GET['nama'] ?? ''));
+$filterKelas = trim((string)($_GET['kelas'] ?? ''));
+$filterKategori = trim((string)($_GET['kategori'] ?? ''));
+
+$kategoriList = mysqli_query($conn, "
+    SELECT DISTINCT kategori
+    FROM barang
+    WHERE kategori IS NOT NULL AND kategori <> '' AND kategori <> 'Alat Tulis'
+    ORDER BY kategori ASC
+");
+
+$sql = "
+    SELECT p.*, u.nama AS nama_akun, b.nama_barang, b.kategori
     FROM peminjaman p
     JOIN users u ON p.user_id=u.id
     JOIN barang b ON p.barang_id=b.id
-    ORDER BY p.id DESC
-");
+";
+
+$where = ["b.kategori <> 'Alat Tulis'"];
+if ($filterNama !== '') {
+    $safe = mysqli_real_escape_string($conn, $filterNama);
+    $like = '%' . $safe . '%';
+    $where[] = "(p.nama_siswa LIKE '{$like}' OR u.nama LIKE '{$like}')";
+}
+
+if ($filterKelas !== '') {
+    $safe = mysqli_real_escape_string($conn, $filterKelas);
+    $like = '%' . $safe . '%';
+    $where[] = "p.kelas LIKE '{$like}'";
+}
+
+if ($filterKategori !== '') {
+    $safe = mysqli_real_escape_string($conn, $filterKategori);
+    $where[] = "b.kategori = '{$safe}'";
+}
+
+$sql .= " WHERE " . implode(" AND ", $where);
+
+$sql .= " ORDER BY p.id DESC";
+
+$q = mysqli_query($conn, $sql);
 
 $kelas_penalty = mysqli_query($conn, "
     SELECT kelas_label, points, suspended_until
@@ -67,6 +103,34 @@ $kelas_penalty = mysqli_query($conn, "
 
                     <div class="card">
                         <h2>Data Peminjaman</h2>
+                        <form method="get" class="form-grid filter-bar">
+                            <div>
+                                <label>Nama</label>
+                                <input type="text" name="nama" value="<?= htmlspecialchars($filterNama); ?>" placeholder="Cari nama siswa">
+                            </div>
+                            <div>
+                                <label>Kelas</label>
+                                <input type="text" name="kelas" value="<?= htmlspecialchars($filterKelas); ?>" placeholder="Cari kelas">
+                            </div>
+                            <div>
+                                <label>Kategori</label>
+                                <select name="kategori">
+                                    <option value="">Semua Kategori</option>
+                                    <?php if ($kategoriList && mysqli_num_rows($kategoriList) > 0): ?>
+                                        <?php while ($cat = mysqli_fetch_assoc($kategoriList)): ?>
+                                            <?php $val = (string)($cat['kategori'] ?? ''); ?>
+                                            <?php if ($val !== ''): ?>
+                                                <option value="<?= htmlspecialchars($val); ?>" <?= $filterKategori === $val ? 'selected' : ''; ?>><?= htmlspecialchars($val); ?></option>
+                                            <?php endif; ?>
+                                        <?php endwhile; ?>
+                                    <?php endif; ?>
+                                </select>
+                            </div>
+                            <div class="controls">
+                                <button type="submit" class="btn btn-primary">Terapkan</button>
+                                <a href="peminjaman.php" class="btn btn-outline">Reset</a>
+                            </div>
+                        </form>
                         <div class="table-wrap">
                             <table>
                                 <thead>
@@ -74,6 +138,7 @@ $kelas_penalty = mysqli_query($conn, "
                                         <th>Nama Siswa</th>
                                         <th>Kelas</th>
                                         <th>Barang</th>
+                                        <th>Kategori</th>
                                         <th>Jumlah</th>
                                         <th>Jatuh Tempo</th>
                                         <th>Status</th>
@@ -87,6 +152,7 @@ $kelas_penalty = mysqli_query($conn, "
                                             <td><?= htmlspecialchars($p['nama_siswa'] ?: $p['nama_akun']); ?></td>
                                             <td><?= htmlspecialchars($p['kelas'] ?: '-'); ?></td>
                                             <td><?= htmlspecialchars($p['nama_barang']); ?></td>
+                                            <td><?= htmlspecialchars($p['kategori'] ?? '-'); ?></td>
                                             <td><?= (int)$p['jumlah_pinjam']; ?></td>
                                             <td>
                                                 <?php if (!empty($p['due_at'])): ?>
@@ -131,7 +197,7 @@ $kelas_penalty = mysqli_query($conn, "
                                         <?php endwhile; ?>
                                     <?php else: ?>
                                         <tr>
-                                            <td colspan="7" class="empty-state">Belum ada data peminjaman.</td>
+                                            <td colspan="8" class="empty-state">Belum ada data peminjaman.</td>
                                         </tr>
                                     <?php endif; ?>
                                 </tbody>
@@ -145,7 +211,8 @@ $kelas_penalty = mysqli_query($conn, "
     <script>
         async function refreshPeminjaman() {
             try {
-                const res = await fetch('peminjaman_data.php', { cache: 'no-store' });
+                const params = new URLSearchParams(window.location.search);
+                const res = await fetch('peminjaman_data.php?' + params.toString(), { cache: 'no-store' });
                 if (!res.ok) return;
                 const data = await res.json();
                 const tbody = document.getElementById('peminjaman-body');
