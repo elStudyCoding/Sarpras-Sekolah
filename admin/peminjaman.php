@@ -2,12 +2,16 @@
 include '../config/session_admin.php';
 include '../config/database.php';
 include '../config/csrf.php';
+include '../config/db_helper.php';
 include '../config/barang_schema.php';
 include '../config/peminjaman_schema.php';
 include '../config/peminjaman_policy.php';
 include_once '../partials/dashboard_ui.php';
 
 $activeMenu = 'peminjaman';
+date_default_timezone_set('Asia/Jakarta');
+$bulanSekarang = (int)date('n');
+$bulanPilihan = $bulanSekarang;
 ensure_peminjaman_schema($conn);
 ensure_barang_schema($conn);
 apply_overdue_penalties($conn);
@@ -30,29 +34,36 @@ $sql = "
     JOIN barang b ON p.barang_id=b.id
 ";
 
-$where = ["b.kategori <> 'Alat Tulis'"];
+$where = ["b.kategori <> ?"];
+$types = "s";
+$params = ['Alat Tulis'];
 if ($filterNama !== '') {
-    $safe = mysqli_real_escape_string($conn, $filterNama);
-    $like = '%' . $safe . '%';
-    $where[] = "(p.nama_siswa LIKE '{$like}' OR u.nama LIKE '{$like}')";
+    $like = '%' . $filterNama . '%';
+    $where[] = "(p.nama_siswa LIKE ? OR u.nama LIKE ?)";
+    $types .= "ss";
+    $params[] = $like;
+    $params[] = $like;
 }
 
 if ($filterKelas !== '') {
-    $safe = mysqli_real_escape_string($conn, $filterKelas);
-    $like = '%' . $safe . '%';
-    $where[] = "p.kelas LIKE '{$like}'";
+    $like = '%' . $filterKelas . '%';
+    $where[] = "p.kelas LIKE ?";
+    $types .= "s";
+    $params[] = $like;
 }
 
 if ($filterKategori !== '') {
-    $safe = mysqli_real_escape_string($conn, $filterKategori);
-    $where[] = "b.kategori = '{$safe}'";
+    $where[] = "b.kategori = ?";
+    $types .= "s";
+    $params[] = $filterKategori;
 }
 
 $sql .= " WHERE " . implode(" AND ", $where);
 
 $sql .= " ORDER BY p.id DESC";
 
-$q = mysqli_query($conn, $sql);
+$stmt = db_stmt_execute($conn, $sql, $types, $params);
+$q = $stmt ? mysqli_stmt_get_result($stmt) : false;
 
 $kelas_penalty = mysqli_query($conn, "
     SELECT kelas_label, points, suspended_until
@@ -102,7 +113,16 @@ $kelas_penalty = mysqli_query($conn, "
                     <?php endif; ?>
 
                     <div class="card">
-                        <h2>Data Peminjaman</h2>
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+                            <h2>Data Peminjaman</h2>
+                            <form method="get" action="peminjaman_export.php" class="inline-action">
+                                <input type="hidden" name="nama" value="<?= htmlspecialchars($filterNama); ?>">
+                                <input type="hidden" name="kelas" value="<?= htmlspecialchars($filterKelas); ?>">
+                                <input type="hidden" name="kategori" value="<?= htmlspecialchars($filterKategori); ?>">
+                                <input type="hidden" name="bulan" value="<?= $bulanPilihan; ?>">
+                                <button type="submit" class="btn btn-primary">Download CSV Bulanan</button>
+                            </form>
+                        </div>
                         <form method="get" class="form-grid filter-bar">
                             <div>
                                 <label>Nama</label>
@@ -223,5 +243,6 @@ $kelas_penalty = mysqli_query($conn, "
         }
         setInterval(refreshPeminjaman, 5000);
     </script>
+    <?php if ($stmt) { mysqli_stmt_close($stmt); } ?>
 </body>
 </html>

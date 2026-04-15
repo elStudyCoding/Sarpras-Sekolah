@@ -5,6 +5,7 @@ include '../config/csrf.php';
 include '../config/public_actor.php';
 include '../config/laporan_schema.php';
 include '../config/school_hours.php';
+include '../config/request_guard.php';
 include_once '../partials/dashboard_ui.php';
 
 $activeMenu = 'laporan';
@@ -14,26 +15,47 @@ ensure_laporan_schema($conn);
 $isSchoolHours = school_hours_is_open_now();
 
 if (isset($_POST['kirim'])) {
+    $guardRejectedLogged = false;
     if (!csrf_is_valid_request()) {
         $error = 'Permintaan tidak valid. Silakan refresh halaman lalu coba lagi.';
+        request_guard_log_rejected($conn, 'laporan', 'csrf_invalid');
+        $guardRejectedLogged = true;
+    } elseif (!request_rate_limit_allow('public_laporan', 6, 120, $waitSeconds)) {
+        $error = "Terlalu banyak percobaan. Coba lagi dalam {$waitSeconds} detik.";
+        request_guard_log_rejected($conn, 'laporan', 'session_rate_limited', ['wait_seconds' => $waitSeconds]);
+        $guardRejectedLogged = true;
+    } elseif (!request_rate_limit_allow_ip($conn, 'public_laporan_ip', 15, 120, $waitIp)) {
+        $error = "Terlalu banyak request dari jaringan ini. Coba lagi dalam {$waitIp} detik.";
+        request_guard_log_rejected($conn, 'laporan', 'ip_rate_limited', ['wait_seconds' => $waitIp]);
+        $guardRejectedLogged = true;
     } elseif (!school_hours_is_open_now()) {
         $error = 'sarpras hanya menerima permintaan dan laporan di jam sekolah saja';
     } else {
         $user_id  = get_public_actor_id($conn);
-        $kelas    = trim($_POST['kelas'] ?? '');
-        $kategori = trim($_POST['kategori'] ?? '');
-        $lokasi   = trim($_POST['lokasi'] ?? '');
-        $deskripsi= trim($_POST['deskripsi'] ?? '');
+        $kelas    = request_normalize_text($_POST['kelas'] ?? '', 50);
+        $kategori = request_normalize_text($_POST['kategori'] ?? '', 30);
+        $lokasi   = request_normalize_text($_POST['lokasi'] ?? '', 120);
+        $deskripsi= request_normalize_text($_POST['deskripsi'] ?? '', 1000);
         $no_telp  = trim($_POST['no_telp'] ?? '');
         $digits   = preg_replace('/\D+/', '', $no_telp);
+        $allowedKategori = ['Kerusakan', 'Perbaikan'];
 
         if ($user_id <= 0) {
             $error = 'Akun sistem publik tidak tersedia. Hubungi admin.';
         } elseif ($kelas === '' || $kategori === '' || $lokasi === '' || $deskripsi === '' || $no_telp === '') {
             $error = 'Semua field laporan wajib diisi.';
+        } elseif (!preg_match('/^[\\p{L}\\p{N}\\s\\.\\-\\/]{2,50}$/u', $kelas)) {
+            $error = 'Format kelas tidak valid.';
+        } elseif (!in_array($kategori, $allowedKategori, true)) {
+            $error = 'Kategori laporan tidak valid.';
+        } elseif (request_mb_len($lokasi) < 3) {
+            $error = 'Lokasi/barang minimal 3 karakter.';
+        } elseif (request_mb_len($deskripsi) < 10) {
+            $error = 'Deskripsi minimal 10 karakter.';
         } elseif (strlen($digits) < 10 || strlen($digits) > 16) {
             $error = 'Nomor WhatsApp tidak valid.';
         } else {
+            $no_telp = $digits;
             $stmt = mysqli_prepare($conn, "
                 INSERT INTO laporan (user_id, kelas, kategori, lokasi, deskripsi, no_telp, status, tanggal_lapor)
                 VALUES (?, ?, ?, ?, ?, ?, 'Baru', CURDATE())
@@ -45,6 +67,13 @@ if (isset($_POST['kirim'])) {
             header("Location: laporan.php?status=ok");
             exit;
         }
+    }
+
+    if ($error !== '' && !$guardRejectedLogged) {
+        request_guard_log_rejected($conn, 'laporan', 'validation_or_policy_reject', [
+            'message' => $error,
+            'kategori' => $kategori ?? '',
+        ]);
     }
 }
 
@@ -106,7 +135,7 @@ $riwayat_laporan = mysqli_query($conn, "
                                     <div class="form-grid">
                                         <div>
                                             <label>Kelas</label>
-                                            <input type="text" name="kelas" placeholder="Contoh: XI RPL 1" required>
+                                            <input type="text" name="kelas" placeholder="Contoh: XI RPL 1" maxlength="50" required>
                                         </div>
 
                                         <div>
@@ -120,17 +149,17 @@ $riwayat_laporan = mysqli_query($conn, "
 
                                         <div class="laporan-col-full">
                                             <label>Lokasi/Barang</label>
-                                            <input type="text" name="lokasi" placeholder="Contoh: Lab Komputer - Proyektor" required>
+                                            <input type="text" name="lokasi" placeholder="Contoh: Lab Komputer - Proyektor" maxlength="120" required>
                                         </div>
 
                                         <div class="laporan-col-full">
                                             <label>No. WhatsApp</label>
-                                            <input type="text" name="no_telp" placeholder="Contoh: 081234567890" required>
+                                            <input type="text" name="no_telp" placeholder="Contoh: 081234567890" maxlength="16" required>
                                         </div>
 
                                         <div class="laporan-col-full">
                                             <label>Deskripsi</label>
-                                            <textarea name="deskripsi" rows="5" placeholder="Jelaskan kondisi barang secara singkat dan jelas..." required></textarea>
+                                            <textarea name="deskripsi" rows="5" maxlength="1000" placeholder="Jelaskan kondisi barang secara singkat dan jelas..." required></textarea>
                                         </div>
                                     </div>
                                 </div>

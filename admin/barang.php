@@ -21,6 +21,7 @@ if ($filterKategori !== '') {
 }
 $sql .= " ORDER BY nama_barang ASC";
 
+
 $data = null;
 if ($filterKategori !== '') {
     $stmt = mysqli_prepare($conn, $sql);

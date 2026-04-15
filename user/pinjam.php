@@ -7,9 +7,12 @@ include '../config/barang_schema.php';
 include '../config/peminjaman_schema.php';
 include '../config/peminjaman_policy.php';
 include '../config/school_hours.php';
+include '../config/request_guard.php';
 include_once '../partials/dashboard_ui.php';
 
 $activeMenu = 'pinjam';
+$error = '';
+$warning = '';
 ensure_peminjaman_schema($conn);
 ensure_barang_schema($conn);
 $isRequestHours = school_request_is_open_now();
@@ -32,28 +35,49 @@ while($row = mysqli_fetch_assoc($barang_query)) {
 }
 
 if (isset($_POST['pinjam'])) {
+    $guardRejectedLogged = false;
     if (!csrf_is_valid_request()) {
         $error = "Permintaan tidak valid. Silakan refresh halaman lalu coba lagi.";
+        request_guard_log_rejected($conn, 'pinjam', 'csrf_invalid');
+        $guardRejectedLogged = true;
+    } elseif (!request_rate_limit_allow('public_pinjam', 8, 120, $waitSeconds)) {
+        $error = "Terlalu banyak percobaan. Coba lagi dalam {$waitSeconds} detik.";
+        request_guard_log_rejected($conn, 'pinjam', 'session_rate_limited', ['wait_seconds' => $waitSeconds]);
+        $guardRejectedLogged = true;
+    } elseif (!request_rate_limit_allow_ip($conn, 'public_pinjam_ip', 20, 120, $waitIp)) {
+        $error = "Terlalu banyak request dari jaringan ini. Coba lagi dalam {$waitIp} detik.";
+        request_guard_log_rejected($conn, 'pinjam', 'ip_rate_limited', ['wait_seconds' => $waitIp]);
+        $guardRejectedLogged = true;
     } elseif (!school_request_is_open_now()) {
         $error = "Sarpras hanya menerima permintaan dan peminjaman di jam sekolah saja.";
     }
 
     $user_id = get_public_actor_id($conn);
-    $nama_siswa = trim($_POST['nama_siswa'] ?? '');
-    $kelas = trim($_POST['kelas'] ?? '');
+    $nama_siswa = request_normalize_text($_POST['nama_siswa'] ?? '', 80);
+    $kelas = request_normalize_text($_POST['kelas'] ?? '', 50);
     $no_telp = trim($_POST['no_telp'] ?? '');
     $barang_id = (int)($_POST['barang_id'] ?? 0);
-    $jumlah_pinjam = (int)$_POST['jumlah_pinjam'];
+    $jumlah_pinjam = (int)($_POST['jumlah_pinjam'] ?? 0);
     
     // Validasi jumlah pinjam
     if (empty($error) && $user_id <= 0) {
         $error = "Akun sistem publik tidak tersedia. Hubungi admin.";
+    } elseif (empty($error) && request_mb_len($nama_siswa) < 2) {
+        $error = "Nama siswa minimal 2 karakter.";
+    } elseif (empty($error) && !preg_match('/^[\\p{L}\\p{N}\\s\\.\\-]{2,80}$/u', $nama_siswa)) {
+        $error = "Nama siswa mengandung karakter yang tidak diizinkan.";
     } elseif (empty($error) && $kelas === '') {
         $error = "Kelas wajib diisi.";
+    } elseif (empty($error) && !preg_match('/^[\\p{L}\\p{N}\\s\\.\\-\\/]{2,50}$/u', $kelas)) {
+        $error = "Format kelas tidak valid.";
     } elseif (empty($error) && $no_telp === '') {
         $error = "Nomor WhatsApp wajib diisi untuk pengingat pengembalian.";
+    } elseif (empty($error) && $barang_id <= 0) {
+        $error = "Barang wajib dipilih.";
     } elseif (empty($error) && $jumlah_pinjam <= 0) {
         $error = "Jumlah pinjam harus lebih dari 0!";
+    } elseif (empty($error) && $jumlah_pinjam > 50) {
+        $error = "Jumlah pinjam maksimal 50 per transaksi.";
     } elseif (empty($error)) {
         $kelasState = kelas_penalty_is_blocked($conn, $kelas);
         if (!empty($kelasState['blocked'])) {
@@ -71,8 +95,8 @@ if (isset($_POST['pinjam'])) {
 
     if (empty($error)) {
         $noTelpDigits = preg_replace('/[^0-9]/', '', $no_telp);
-        if ($noTelpDigits === '' || strlen($noTelpDigits) < 10) {
-            $error = "Nomor WhatsApp minimal 10 digit.";
+        if ($noTelpDigits === '' || strlen($noTelpDigits) < 10 || strlen($noTelpDigits) > 16) {
+            $error = "Nomor WhatsApp harus 10 sampai 16 digit.";
         } else {
             $no_telp = $noTelpDigits;
         }
@@ -114,9 +138,17 @@ if (isset($_POST['pinjam'])) {
                 header("Location: riwayat.php?status=ok");
                 exit;
             } else {
-                $error = "Error: " . mysqli_error($conn);
+                $error = "Gagal menyimpan peminjaman. Silakan coba lagi.";
             }
         }
+    }
+
+    if (!empty($error) && !$guardRejectedLogged) {
+        request_guard_log_rejected($conn, 'pinjam', 'validation_or_policy_reject', [
+            'message' => $error,
+            'barang_id' => $barang_id,
+            'jumlah' => $jumlah_pinjam,
+        ]);
     }
 }
 ?>
@@ -173,16 +205,16 @@ if (isset($_POST['pinjam'])) {
                             <div class="form-grid">
                                 <div>
                                     <label for="nama_siswa">Nama Siswa</label>
-                                    <input type="text" id="nama_siswa" name="nama_siswa" placeholder="Contoh: Budi Santoso" required>
+                                    <input type="text" id="nama_siswa" name="nama_siswa" placeholder="Contoh: Budi Santoso" maxlength="80" required>
                                 </div>
                                 <div>
                                     <label for="kelas">Kelas</label>
-                                    <input type="text" id="kelas" name="kelas" placeholder="Contoh: XI RPL 1" required>
+                                    <input type="text" id="kelas" name="kelas" placeholder="Contoh: XI RPL 1" maxlength="50" required>
                                 </div>
                             </div>
                             <div class="form-group">
                                 <label for="no_telp">No. WhatsApp Peminjam:</label>
-                                <input type="text" id="no_telp" name="no_telp" class="form-control" placeholder="Contoh: 081234567890" required>
+                                <input type="text" id="no_telp" name="no_telp" class="form-control" placeholder="Contoh: 081234567890" maxlength="16" required>
                             </div>
                             <div class="form-group">
                                 <label for="kategori_id">Pilih Kategori:</label>
@@ -212,7 +244,7 @@ if (isset($_POST['pinjam'])) {
 
                             <div class="form-group">
                                 <label for="jumlah_pinjam">Jumlah Pinjam:</label>
-                                <input type="number" id="jumlah_pinjam" name="jumlah_pinjam" class="form-control" value="1" min="1" required>
+                                <input type="number" id="jumlah_pinjam" name="jumlah_pinjam" class="form-control" value="1" min="1" max="50" required>
                             </div>
 
                             <div class="controls form-mobile-actions">

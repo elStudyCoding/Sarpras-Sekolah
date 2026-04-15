@@ -2,6 +2,7 @@
 include '../config/session_admin.php';
 include '../config/database.php';
 include '../config/csrf.php';
+include '../config/db_helper.php';
 include '../config/barang_schema.php';
 include '../config/peminjaman_schema.php';
 include '../config/peminjaman_policy.php';
@@ -21,29 +22,36 @@ $sql = "
     JOIN barang b ON p.barang_id=b.id
 ";
 
-$where = ["b.kategori <> 'Alat Tulis'"];
+$where = ["b.kategori <> ?"];
+$types = "s";
+$params = ['Alat Tulis'];
 if ($filterNama !== '') {
-    $safe = mysqli_real_escape_string($conn, $filterNama);
-    $like = '%' . $safe . '%';
-    $where[] = "(p.nama_siswa LIKE '{$like}' OR u.nama LIKE '{$like}')";
+    $like = '%' . $filterNama . '%';
+    $where[] = "(p.nama_siswa LIKE ? OR u.nama LIKE ?)";
+    $types .= "ss";
+    $params[] = $like;
+    $params[] = $like;
 }
 
 if ($filterKelas !== '') {
-    $safe = mysqli_real_escape_string($conn, $filterKelas);
-    $like = '%' . $safe . '%';
-    $where[] = "p.kelas LIKE '{$like}'";
+    $like = '%' . $filterKelas . '%';
+    $where[] = "p.kelas LIKE ?";
+    $types .= "s";
+    $params[] = $like;
 }
 
 if ($filterKategori !== '') {
-    $safe = mysqli_real_escape_string($conn, $filterKategori);
-    $where[] = "b.kategori = '{$safe}'";
+    $where[] = "b.kategori = ?";
+    $types .= "s";
+    $params[] = $filterKategori;
 }
 
 $sql .= " WHERE " . implode(" AND ", $where);
 
 $sql .= " ORDER BY p.id DESC";
 
-$q = mysqli_query($conn, $sql);
+$stmt = db_stmt_execute($conn, $sql, $types, $params);
+$q = $stmt ? mysqli_stmt_get_result($stmt) : false;
 
 $rows = '';
 while ($p = mysqli_fetch_assoc($q)) {
@@ -85,6 +93,10 @@ while ($p = mysqli_fetch_assoc($q)) {
 
 if ($rows === '') {
     $rows = '<tr><td colspan="8" class="empty-state">Belum ada data peminjaman.</td></tr>';
+}
+
+if ($stmt) {
+    mysqli_stmt_close($stmt);
 }
 
 header('Content-Type: application/json');

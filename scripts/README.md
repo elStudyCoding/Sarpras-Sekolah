@@ -33,3 +33,20 @@ Data awal setelah reset:
   - LCD
   - Kabel HDMI
   - Speaker
+
+## Kosongkan Data Aplikasi (Tanpa Hapus User)
+
+Perintah ini akan mengikuti script SQL di `sql/clear_app_data.sql`.
+
+```powershell
+C:\laragon\bin\php\php-8.3.28-Win32-vs16-x64\php.exe scripts\clear_app_data.php
+```
+
+Yang dikosongkan:
+- `peminjaman`
+- `permintaan_barang`
+- `laporan`
+- `audit_logs`
+- `class_penalties`
+- `wa_notification_logs`
+- `barang`

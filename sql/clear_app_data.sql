@@ -1,0 +1,11 @@
+SET FOREIGN_KEY_CHECKS=0;
+
+TRUNCATE TABLE peminjaman;
+TRUNCATE TABLE permintaan_barang;
+TRUNCATE TABLE laporan;
+TRUNCATE TABLE audit_logs;
+TRUNCATE TABLE class_penalties;
+TRUNCATE TABLE wa_notification_logs;
+TRUNCATE TABLE barang;
+
+SET FOREIGN_KEY_CHECKS=1;
